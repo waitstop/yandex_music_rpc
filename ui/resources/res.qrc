@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="icons">
+    <file>github_icon.svg</file>
+    <file>help_icon.svg</file>
+  </qresource>
+</RCC>
