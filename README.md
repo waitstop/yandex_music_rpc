@@ -3,4 +3,6 @@
 
 ![ui.png](screenshots%2Fui.png)
 
+![discord.png](screenshots%2Fdiscord.png)
+
 ## [Как получить токен?](https://yandex-music.readthedocs.io/en/main/token.html)
