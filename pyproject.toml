@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "yandex-music-rpc"
+version = "0.1.0"
+description = ""
+authors = ["Aleksandr <waitstop> Kazakov"]
+readme = "README.md"
+packages = [{include = "yandex_music_rpc"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
