@@ -8,6 +8,7 @@ packages = [{include = "yandex_music_rpc"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+dearpygui = "^1.9.1"
 
 
 [build-system]
