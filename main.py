@@ -1,14 +1,11 @@
 import webbrowser
-from tkinter import PhotoImage
+from tkinter import IntVar
 
 import customtkinter as ctk
 from configparser import ConfigParser
-
 import pystray
 from PIL import Image
-
-config = ConfigParser()
-config.read('config.ini')
+from os.path import exists
 
 
 class TokenInput(ctk.CTkFrame):
@@ -43,8 +40,9 @@ class TokenInput(ctk.CTkFrame):
 class DelaySlider(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
-        self.grid_columnconfigure(0, weight=1)
+        self.delay = IntVar(master, int(config["settings"]["delay"]))
 
+        self.grid_columnconfigure(0, weight=1)
         self.slider_label = ctk.CTkLabel(self,
                                          text="Задержка обновления треков",
                                          font=("Roboto Condensed", 16)
@@ -53,16 +51,17 @@ class DelaySlider(ctk.CTkFrame):
 
         self.delay_slider = ctk.CTkSlider(self, from_=5, to=30, number_of_steps=5, command=self.slider_callback)
         self.delay_slider.grid(row=1, column=0, sticky="ew", pady=15, padx=10)
-        self.delay_slider.set(5)
+
+        self.delay_slider.set(int(self.delay.get()))
 
         self.slider_value_label = ctk.CTkLabel(self,
-                                               text=f'{int(self.delay_slider.get())} сек.',
+                                               textvariable=self.delay,
                                                font=("Roboto Condensed", 16)
                                                )
         self.slider_value_label.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="e")
 
     def slider_callback(self, value):
-        self.slider_value_label.configure(text=f'{int(value)} сек.')
+        self.delay.set(int(value))
 
 
 class StatusLabel(ctk.CTkFrame):
@@ -136,6 +135,15 @@ def on_open():
 
 
 if __name__ == '__main__':
+    config = ConfigParser()
+    if exists("config.ini"):
+        config.read('config.ini')
+    else:
+        config["secret"] = {"yandex_oauth_token": ""}
+        config["settings"] = {
+            "delay": "5"
+        }
+
     app = App()
 
     image = Image.open("./img/yandex_icon.png")

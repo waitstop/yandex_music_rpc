@@ -15,5 +15,5 @@ def get_data(token: str) -> dict | Exception:
     title = last_track.title
     cover = last_track.get_cover_url()
     data = {'state': artists, 'details': title, 'large_image': cover, 'small_image': 'logo'}
-    data = {**data, 'buttons': [{"label": "Open in Yandex.Music", "url": link}]}
+    data = {**data, 'buttons': [{"label": "Open in Yandex.Music", "url": link}]}  # Button
     return data
