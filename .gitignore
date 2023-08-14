@@ -2,4 +2,5 @@
 /.idea
 .env
 *.lnk
+config.ini
 config.txt

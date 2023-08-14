@@ -1,183 +1,192 @@
-import os.path
-import sys
-import time
+import threading
 import webbrowser
-from typing import Callable
+from tkinter import IntVar, StringVar
 
-from PySide6.QtCore import QObject, Signal, QRunnable, QThreadPool
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QLineEdit, QSlider, QCheckBox
-from ui_main_window import Ui_MainWindow
+import customtkinter as ctk
+from configparser import ConfigParser
+import pystray
+from PIL import Image
+from os.path import exists
+
 from pypresence import Presence
-from pypresence.exceptions import PyPresenceException
-from yandex_music import Client
-from yandex_music.exceptions import NotFoundError, YandexMusicError
-import configparser
+
+import handlers.yandex as yandex
+from handlers.rpc import update_rpc
 
 
-def load_config(file_name: str = "config.txt") -> dict:
-    config = configparser.ConfigParser()
-    default_settings = {
-        'delay': 5,
-        'show_button': 'true'
-    }
-    if not os.path.exists(file_name):
-        config['secret'] = {'yandex_oauth_token': ''}
-        config['settings'] = default_settings
-        with open(file_name, 'x') as f:
-            config.write(f)
-    else:
-        config.read_file(open(file_name))
-    return {**dict(config.items('secret')), **dict(config.items('settings'))}
+class TokenInput(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.token = StringVar(master, config["secret"]["yandex_oauth_token"])
+        self.grid_columnconfigure(0, weight=1)
+        self.input_label = ctk.CTkLabel(self,
+                                        text="Яндекс.Музыка OAuth Токен",
+                                        font=("Roboto Condensed", 16)
+                                        )
+        self.input_label.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="w")
+
+        self.input_help = ctk.CTkButton(self,
+                                        text="Помощь",
+                                        image=ctk.CTkImage(
+                                            dark_image=Image.open("./img/help_icon.png"),
+                                            size=(16, 16)),
+                                        command=self.handle_help
+                                        )
+        self.input_help.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="e")
+
+        self.token_input = ctk.CTkEntry(self, border_width=0, textvariable=self.token, show="*")
+        self.token_input.grid(row=1, column=0, sticky="ew", pady=15, padx=10)
+
+    @staticmethod
+    def handle_help():
+        webbrowser.open(
+            "https://github.com/waitstop/yandex_music_rpc#%D0%BA%D0%B0%D0%BA-%D0%BF%D0%BE%D0%BB%D1%83%D1%87%D0%B8%D1%82%D1%8C-%D1%82%D0%BE%D0%BA%D0%B5%D0%BD"
+        )
 
 
-def set_config(token: str, settings: dict, file_name: str = "config.txt") -> None:
-    config = configparser.ConfigParser()
-    config['secret'] = {'yandex_oauth_token': token}
-    config['settings'] = settings
-    with open(file_name, 'w') as f:
-        config.write(f)
+class DelaySlider(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.delay = IntVar(master, int(config["settings"]["delay"]))
+
+        self.grid_columnconfigure(0, weight=1)
+        self.slider_label = ctk.CTkLabel(self,
+                                         text="Задержка обновления треков",
+                                         font=("Roboto Condensed", 16)
+                                         )
+        self.slider_label.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="w")
+
+        self.delay_slider = ctk.CTkSlider(self, from_=5, to=30, number_of_steps=5, command=self.slider_callback)
+        self.delay_slider.grid(row=1, column=0, sticky="ew", pady=15, padx=10)
+
+        self.delay_slider.set(int(self.delay.get()))
+
+        self.slider_value_label = ctk.CTkLabel(self,
+                                               textvariable=self.delay,
+                                               font=("Roboto Condensed", 16)
+                                               )
+        self.slider_value_label.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="e")
+
+    def slider_callback(self, value):
+        self.delay.set(int(value))
 
 
-class WorkerSignals(QObject):
-    finished = Signal()
+class StatusLabel(ctk.CTkFrame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.status = StringVar(master, "OK")
+        self.grid_columnconfigure(0, weight=1)
+
+        self.label = ctk.CTkLabel(self,
+                                  text="СТАТУС: ",
+                                  font=("Roboto Condensed", 16)
+                                  )
+        self.statusLabel = ctk.CTkLabel(self,
+                                        textvariable=self.status,
+                                        font=("Roboto Condensed", 16, "bold")
+                                        )
+        self.label.grid(row=0, column=0, sticky="e", pady=5, padx=10)
+        self.statusLabel.grid(row=0, column=1, sticky="w", pady=5, padx=10)
 
 
-class Worker(QRunnable):
-    def __init__(self, work: Callable):
-        super().__init__()
-        self.signals = WorkerSignals()
-        self.work = work
-
-    def run(self):
-        self.work()
-        self.signals.finished.emit()
-
-
-class MainWindow(QMainWindow):
+class App(ctk.CTk):
     def __init__(self):
-        super(MainWindow, self).__init__()
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        super().__init__()
 
-        # Loading cfg
-        self.token: str = load_config()['yandex_oauth_token']
-        self.delay: int = int(load_config()['delay'])
-        self.show_button: bool = True if load_config()['show_button'].lower() == "true" else False
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("./themes/NightTrain.json")
+        self.iconbitmap("./img/yandex_icon.ico")
 
-        # Set values to UI
-        self.findChild(QLineEdit, 'token_input').setText(self.token)
-        self.findChild(QSlider, "delay_slider").setValue(self.delay)
-        self.findChild(QCheckBox, "checkBox").setChecked(self.show_button)
-        self.findChild(QLabel, 'status_label').setText("ОК")
+        self.title("Yandex.Music RPC")
+        self.resizable(False, False)
+        self.geometry("500x500")
+        self.grid_columnconfigure(0, weight=1)
 
-        self.RPC = Presence('980573087168876594', pipe=0)
+        self.label = ctk.CTkLabel(self,
+                                  text="Yandex.Music Discord Integration",
+                                  font=("Roboto Condensed", 20)
+                                  )
+        self.label.grid(row=0, column=0, sticky="ew", padx=25, pady=[25, 0])
 
-        # Connecting to Yandex API
-        try:
-            self.client = Client(self.token).init()
-        except Exception as er:
-            print(str(er))
-            self.findChild(QLabel, 'status_label').setText("Ошибка API Yandex.Music")
+        self.token_input = TokenInput(self)
+        self.token_input.grid(row=1, column=0, sticky="ew", padx=25, pady=[25, 0])
 
-        # Connecting to Discord RPC
-        self.connect_rpc()
+        self.delay_slider = DelaySlider(self)
+        self.delay_slider.grid(row=2, column=0, sticky="ew", padx=25, pady=[25, 0])
 
-        # Main update loop
-        loop_worker = Worker(self.update_loop)
-        QThreadPool.globalInstance().start(loop_worker)
+        self.save_btn = ctk.CTkButton(self,
+                                      text="Обновить / Сохранить",
+                                      font=("Roboto Condensed", 20),
+                                      command=self.save_callback
+                                      )
+        self.save_btn.grid(row=3, column=0, sticky="ew", padx=25, pady=[25, 0], ipady=5)
 
-    @staticmethod
-    def open_gh_link():
-        webbrowser.open("https://github.com/waitstop/yandex_music_rpc")
+        self.status_label = StatusLabel(self)
+        self.status_label.grid(row=4, column=0, padx=25, pady=[25, 0])
 
-    @staticmethod
-    def open_help():
-        webbrowser.open("https://yandex-music.readthedocs.io/en/main/token.html")
-
-    def slider_changed_value(self, value: int):
-        self.delay = value
-        self.findChild(QLabel, 'delay_label').setText(f'{value} сек.')
-
-    def handle_save_btn(self):
-        worker = Worker(self.save_update)
-        QThreadPool.globalInstance().start(worker)
-
-    def handle_checkbox(self, state: int):
-        self.show_button = False if state == 0 else True
-
-    def save_update(self):
-        self.token = self.findChild(QLineEdit, "token_input").text()
-        self.delay = self.findChild(QSlider, "delay_slider").value()
-        self.show_button = self.findChild(QCheckBox, "checkBox").isChecked()
-
-        set_config(self.token, {"delay": self.delay, "show_button": self.show_button})
-
-        try:
-            self.client = Client(self.token).init()
-            self.update_rpc()
-            self.findChild(QLabel, 'status_label').setText("ОК")
-            time.sleep(self.delay)
-        except YandexMusicError:
-            self.findChild(QLabel, 'status_label').setText("Ошибка API Yandex.Music")
-        except PyPresenceException:
-            self.findChild(QLabel, 'status_label').setText("Ошибка RPC")
-        except Exception:
-            self.findChild(QLabel, 'status_label').setText("Неизвестная ошибка")
-
-    def get_data(self) -> dict | Exception:
-        try:
-            queues = self.client.queues_list()
-            last_queue = self.client.queue(queues[0].id)
-            self.findChild(QLabel, 'status_label').setText("ОК")
-        except Exception as er:
-            self.findChild(QLabel, 'status_label').setText("Ошибка получения данных с Яндекс")
-            return er
-        last_track_id = last_queue.get_current_track()
-        last_track = last_track_id.fetch_track()
-        artists = ', '.join(last_track.artists_name())
-        link = f'https://music.yandex.ru/album/{last_track_id.album_id}/track/{last_track_id.track_id}'
-        title = last_track.title
-        cover = last_track.get_cover_url()
-        data = {'state': artists, 'details': title, 'large_image': cover, 'small_image': 'logo'}
-        if self.show_button:
-            data = {**data, 'buttons': [{"label": "Open in Yandex.Music", "url": link}]}
-        return data
-
-    def update_rpc(self) -> Exception | None:
-        try:
-            self.client = Client(self.token).init()
-            self.RPC.update(**self.get_data())
-            self.findChild(QLabel, 'status_label').setText("ОК")
-        except NotFoundError as er:
-            self.RPC.clear()
-            self.findChild(QLabel, 'status_label').setText("Трек не найден")
-            return er
-        except YandexMusicError:
-            self.findChild(QLabel, 'status_label').setText("Ошибка API Yandex.Music")
-        except PyPresenceException as er:
-            print(str(er))
-            self.findChild(QLabel, 'status_label').setText("Ошибка RPC")
-            return er
-        except Exception as er:
-            self.findChild(QLabel, 'status_label').setText("Неизвестная ошибка")
-            return er
-
-    def update_loop(self):
-        while True:
-            self.update_rpc()
-            time.sleep(self.delay)
-
-    def connect_rpc(self) -> Exception | None:
-        try:
-            self.RPC.connect()
-            self.findChild(QLabel, 'status_label').setText("ОК")
-        except PyPresenceException as er:
-            self.findChild(QLabel, 'status_label').setText("Ошибка RPC")
-            return er
+    def save_callback(self):
+        delay = self.delay_slider.delay.get()
+        token = self.token_input.token.get()
+        config["secret"]["yandex_oauth_token"] = token
+        config["settings"]["delay"] = str(delay)
+        with open("config.ini", "w") as file:
+            config.write(file)
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+def on_window_close():
+    app.withdraw()
+
+
+def on_exit():
+    icon.stop()
+    app.quit()
+
+
+def on_open():
+    icon.update_menu()
+    app.deiconify()
+
+
+def update():
+    data = yandex.get_data(config["secret"]["yandex_oauth_token"])
+    app.status_label.status.set("ОК")
+    update_rpc(data, rpc, app.status_label.status)
+    app.after(int(config["settings"]["delay"])*1000, update)
+
+
+def start_thread():
+    thread = threading.Thread(target=update)
+    thread.start()
+
+
+if __name__ == '__main__':
+    config = ConfigParser()
+    if exists("config.ini"):
+        config.read('config.ini')
+    else:
+        config["secret"] = {"yandex_oauth_token": ""}
+        config["settings"] = {
+            "delay": "5"
+        }
+        with open("config.ini", "x") as f:
+            config.write(f)
+
+    app = App()
+
+    image = Image.open("./img/yandex_icon.png")
+    menu = (
+        pystray.MenuItem('Yandex.Music RPC', on_open, default=True, visible=False),
+        pystray.MenuItem('Выход', on_exit)
+    )
+    icon = pystray.Icon("name", image, "Yandex.Music RPC", menu)
+
+    icon.run_detached()
+
+    app.protocol('WM_DELETE_WINDOW', on_window_close)
+
+    rpc = Presence('980573087168876594', pipe=0)
+    rpc.connect()
+    start_thread()
+
+    app.mainloop()
+
