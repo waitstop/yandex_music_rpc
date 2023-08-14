@@ -9,7 +9,7 @@
 <h1>Скриншоты</h1>
 <hr>
 
-![ui.png](screenshots%2Fui.png)
+![ui.png](screenshots%2Fui1_1.png)
 
 ![tray.png](screenshots%2Ftray.png)
 
