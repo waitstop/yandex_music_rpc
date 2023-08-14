@@ -1,5 +1,6 @@
+import threading
 import webbrowser
-from tkinter import IntVar
+from tkinter import IntVar, StringVar
 
 import customtkinter as ctk
 from configparser import ConfigParser
@@ -7,10 +8,16 @@ import pystray
 from PIL import Image
 from os.path import exists
 
+from pypresence import Presence
+
+import handlers.yandex as yandex
+from handlers.rpc import update_rpc
+
 
 class TokenInput(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
+        self.token = StringVar(master, config["secret"]["yandex_oauth_token"])
         self.grid_columnconfigure(0, weight=1)
         self.input_label = ctk.CTkLabel(self,
                                         text="Яндекс.Музыка OAuth Токен",
@@ -27,7 +34,7 @@ class TokenInput(ctk.CTkFrame):
                                         )
         self.input_help.grid(row=0, column=0, pady=[15, 5], padx=10, sticky="e")
 
-        self.token_input = ctk.CTkEntry(self, border_width=0)
+        self.token_input = ctk.CTkEntry(self, border_width=0, textvariable=self.token, show="*")
         self.token_input.grid(row=1, column=0, sticky="ew", pady=15, padx=10)
 
     @staticmethod
@@ -67,18 +74,19 @@ class DelaySlider(ctk.CTkFrame):
 class StatusLabel(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
+        self.status = StringVar(master, "OK")
         self.grid_columnconfigure(0, weight=1)
 
         self.label = ctk.CTkLabel(self,
                                   text="СТАТУС: ",
                                   font=("Roboto Condensed", 16)
                                   )
-        self.status = ctk.CTkLabel(self,
-                                   text="OK",
-                                   font=("Roboto Condensed", 16, "bold")
-                                   )
+        self.statusLabel = ctk.CTkLabel(self,
+                                        textvariable=self.status,
+                                        font=("Roboto Condensed", 16, "bold")
+                                        )
         self.label.grid(row=0, column=0, sticky="e", pady=5, padx=10)
-        self.status.grid(row=0, column=1, sticky="w", pady=5, padx=10)
+        self.statusLabel.grid(row=0, column=1, sticky="w", pady=5, padx=10)
 
 
 class App(ctk.CTk):
@@ -109,15 +117,20 @@ class App(ctk.CTk):
         self.save_btn = ctk.CTkButton(self,
                                       text="Обновить / Сохранить",
                                       font=("Roboto Condensed", 20),
-                                      command=self.save
+                                      command=self.save_callback
                                       )
         self.save_btn.grid(row=3, column=0, sticky="ew", padx=25, pady=[25, 0], ipady=5)
 
         self.status_label = StatusLabel(self)
         self.status_label.grid(row=4, column=0, padx=25, pady=[25, 0])
 
-    def save(self):
-        pass
+    def save_callback(self):
+        delay = self.delay_slider.delay.get()
+        token = self.token_input.token.get()
+        config["secret"]["yandex_oauth_token"] = token
+        config["settings"]["delay"] = str(delay)
+        with open("config.ini", "w") as file:
+            config.write(file)
 
 
 def on_window_close():
@@ -134,6 +147,18 @@ def on_open():
     app.deiconify()
 
 
+def update():
+    data = yandex.get_data(config["secret"]["yandex_oauth_token"])
+    app.status_label.status.set("ОК")
+    update_rpc(data, rpc, app.status_label.status)
+    app.after(int(config["settings"]["delay"])*1000, update)
+
+
+def start_thread():
+    thread = threading.Thread(target=update)
+    thread.start()
+
+
 if __name__ == '__main__':
     config = ConfigParser()
     if exists("config.ini"):
@@ -143,6 +168,8 @@ if __name__ == '__main__':
         config["settings"] = {
             "delay": "5"
         }
+        with open("config.ini", "x") as f:
+            config.write(f)
 
     app = App()
 
@@ -156,4 +183,10 @@ if __name__ == '__main__':
     icon.run_detached()
 
     app.protocol('WM_DELETE_WINDOW', on_window_close)
+
+    rpc = Presence('980573087168876594', pipe=0)
+    rpc.connect()
+    start_thread()
+
     app.mainloop()
+

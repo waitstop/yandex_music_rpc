@@ -592,6 +592,17 @@ pyobjc-core = ">=9.2"
 pyobjc-framework-Cocoa = ">=9.2"
 
 [[package]]
+name = "pypresence"
+version = "4.3.0"
+description = "Discord RPC client written in Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pypresence-4.3.0-py2.py3-none-any.whl", hash = "sha256:af878c6d49315084f1b108aec86b31915080614d9421d6dd3a44737aba9ff13f"},
+    {file = "pypresence-4.3.0.tar.gz", hash = "sha256:a6191a3af33a9667f2a4ef0185577c86b962ee70aa82643c472768a6fed1fbf3"},
+]
+
+[[package]]
 name = "pysocks"
 version = "1.7.1"
 description = "A Python SOCKS client module. See https://github.com/Anorov/PySocks for more information."
@@ -789,4 +800,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "fc548d205942caa276e8eb955930e6c746cdff3535ddead91338914365fdc2e0"
+content-hash = "ca52f71a557eeeaf8d0a29d49f90006b1c909f7349a32db4748fb28520a45dc0"

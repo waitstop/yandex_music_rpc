@@ -13,6 +13,7 @@ configparser = "^6.0.0"
 pillow = "^10.0.0"
 pystray = "^0.19.4"
 yandex-music = "^2.1.1"
+pypresence = "^4.3.0"
 
 
 [build-system]
